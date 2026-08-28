@@ -20,7 +20,7 @@ a string, and new equations need no PDF. Details in `SKILL.md`.
 ## Install
 
 ```bash
-git clone https://github.com/<you>/claude-keynote-skill ~/.claude/skills/keynote
+git clone https://github.com/aperrault/claude-keynote-skill ~/.claude/skills/keynote
 ```
 
 Requirements: macOS with Keynote (tested on Keynote 15.1.1; keynote-parser
