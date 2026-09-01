@@ -59,3 +59,20 @@
   Before editing by slide number, compare `keynote.py outline` and
   `keynote_iwa.py outline` counts: a slide Keynote shows but the file lacks
   means unsaved work is sitting in Keynote.
+
+## Save-loss incident #3 (2026-08-31) — `close` after a timed-out save
+
+- Sequence: `rebuild-slide` + `move-slide` → `close` timed out ("file on disk
+  did not change within 90 s", document left open) → second `close` printed
+  `saved (no pending changes)` and closed with `saving no`. The slide was gone:
+  Keynote's `modified` flag had flipped to false when the *first* save was
+  issued, so the retry believed nothing was pending. OneDrive-hosted deck; the
+  redo saved in ~7 s, so the first stall was a file-provider hiccup, not size.
+- Fix: every MUTATING command writes a **pending marker**
+  (`~/Library/Caches/claude-keynote/pending/<deck>-<hash>.txt`, a timestamp).
+  `save`/`close` treat the deck as dirty while the file's mtime is older than
+  the marker, regardless of `modified`, wait for the write, and clear the
+  marker only after the mtime advances. A timed-out save now says the document
+  was left open and a retry re-waits instead of closing.
+- Package edits (`keynote_iwa.py`) are not affected: they write the file
+  directly and are keyed on its content hash.

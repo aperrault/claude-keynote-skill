@@ -120,6 +120,9 @@ floating (non-inline) equations — rare in practice; they are listed as
   30 kept). `keynote.py backups DECK` lists them, `keynote.py backup DECK`
   forces one. Dir: `~/Library/Caches/claude-keynote/backups/`.
 - **Verified saves.** `save`/`close` wait for the bytes to land and fail loudly.
+  Every mutating command also drops a *pending marker*, so a `close` retried
+  after a timed-out save still waits for the write instead of trusting
+  Keynote's `modified` flag (which lies once a save has been *issued*).
 - **Open-deck guard.** Package mutators refuse to run while Keynote has the deck.
 - **`verify`** after reopening: every item readable, every slide renders.
 - **Tests.** `python3 tests/run_tests.py` runs every mutator on

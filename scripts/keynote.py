@@ -79,6 +79,40 @@ MUTATING = {"set-text", "set-notes", "add-text", "add-image", "add-slide", "move
             "delete-item", "delete-image", "delete-slide", "set-size", "set-geometry",
             "rebuild-slide"}
 BACKUP_DIR = Path.home() / "Library/Caches/claude-keynote/backups"
+PENDING_DIR = Path.home() / "Library/Caches/claude-keynote/pending"
+
+
+def _pending_marker(deck: Path) -> Path:
+    import hashlib
+    key = hashlib.sha1(str(deck.expanduser().resolve()).encode()).hexdigest()[:16]
+    return PENDING_DIR / f"{deck.stem}-{key}.txt"
+
+
+def mark_pending(deck: Path) -> None:
+    """Record that this deck has AppleScript edits that are not yet on disk.
+
+    Keynote's `modified` flag flips to false as soon as `save` is *issued*, even
+    if the bytes never land (seen on OneDrive). The marker survives that lie:
+    save/close treat the deck as dirty until the file's mtime is newer than the
+    marker, and refuse to close before then.
+    """
+    import time
+    PENDING_DIR.mkdir(parents=True, exist_ok=True)
+    _pending_marker(deck).write_text(str(time.time_ns()))
+
+
+def pending_since(deck: Path) -> int | None:
+    m = _pending_marker(deck)
+    try:
+        return int(m.read_text().strip())
+    except (FileNotFoundError, ValueError):
+        return None
+
+
+def clear_pending(deck: Path) -> None:
+    m = _pending_marker(deck)
+    if m.exists():
+        m.unlink()
 
 
 def rolling_backup(deck: Path, min_age_s: int = 900, keep: int = 30) -> Path | None:
@@ -487,6 +521,7 @@ def main() -> int:
             b = rolling_backup(a.deck)
             if b:
                 print(f"backup: {b}", file=sys.stderr)
+            mark_pending(a.deck)
 
         if a.cmd == "set-text":
             # Setting object text via AppleScript silently destroys every
@@ -659,6 +694,13 @@ end tell''')
             # no longer dirty before trusting it.
             was_dirty = applescript(f'get modified of document "{esc(doc)}"').strip() == "true"
             before = a.deck.stat().st_mtime_ns if a.deck.exists() else 0
+            # A previous save may have been reported but never written; the
+            # pending marker (set by every mutating command) outlives Keynote's
+            # `modified` flag, so treat the deck as dirty until the file on disk
+            # is newer than the last edit.
+            since = pending_since(a.deck)
+            if since is not None and before < since:
+                was_dirty = True
             applescript(f'save document "{esc(doc)}"')
             # Keynote's save returns before the bytes are on disk; `modified`
             # flips to false immediately and a close right after cancels the
@@ -671,11 +713,13 @@ end tell''')
                 if a.deck.stat().st_mtime_ns == before:
                     raise KeynoteError(
                         "Keynote reported the save but the file on disk did not change "
-                        "within 90 s. Save by hand in Keynote (File > Save), check for a "
+                        "within 90 s; the document was left OPEN so nothing is lost. "
+                        "Save by hand in Keynote (File > Save), check for a "
                         "'modified by another application' dialog, then retry.")
                 time.sleep(1.0)   # let the file provider settle
             if applescript(f'get modified of document "{esc(doc)}"').strip() == "true":
                 raise KeynoteError("document still marked modified after save")
+            clear_pending(a.deck)
             if a.cmd == "close":
                 applescript(f'close document "{esc(doc)}" saving no')
             print(f"saved ({'wrote changes' if was_dirty else 'no pending changes'})")
