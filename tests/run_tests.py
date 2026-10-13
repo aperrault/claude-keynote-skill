@@ -42,8 +42,27 @@ def png_1x1(path: Path):
                      + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
 
 
+def drop_test_docs():
+    """Close every open "t.key" without saving. Keynote addresses documents by
+    name, so a deck left open by a run that died would otherwise be the one
+    later `close` calls hit -- and the live deck, its folder deleted, then
+    raises "The location of the document cannot be determined"."""
+    subprocess.run(["osascript", "-e", 'tell application id "com.apple.Keynote" to '
+                    'close (every document whose name is "t.key") saving no'],
+                   capture_output=True, text=True)
+
+
 def main():
+    drop_test_docs()
     tmp = Path(tempfile.mkdtemp(prefix="keynote-skill-test-"))
+    try:
+        return _main(tmp)
+    finally:
+        drop_test_docs()
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _main(tmp: Path):
     deck = tmp / "t.key"
     shutil.copy2(HERE / "fixture.key", deck)
     img = tmp / "dot.png"; png_1x1(img)
@@ -55,7 +74,8 @@ def main():
     check("outline lists 7 slides", "7 slides" in out, out[:60])
     run(K + ["set-text", str(deck), "--slide", "2", "--item", "1", "--text", "Plain bullets (edited)"])
     run(K + ["set-notes", str(deck), "--slide", "2", "--text", "Edited notes."])
-    run(K + ["add-text", str(deck), "--slide", "2", "--text", "credit: tests", "--x", "1500", "--y", "1000", "--width", "300"])
+    r = run(K + ["add-text", str(deck), "--slide", "2", "--text", "credit: tests", "--x", "1500", "--y", "1000", "--width", "300"])
+    check("add-text copied the body style without error", "could not copy body style" not in r.stderr, r.stderr)
     run(K + ["add-image", str(deck), "--slide", "2", "--image", str(img), "--x", "100", "--y", "900", "--width", "50"])
     run(K + ["set-geometry", str(deck), "--slide", "2", "--image", "1", "--x", "200", "--y", "900", "--width", "80"])
     run(K + ["set-size", str(deck), "--slide", "2", "--item", "3", "--size", "20"])
@@ -138,7 +158,6 @@ def main():
     r = run(K + ["backups", str(deck)]).stdout
     check("rolling backup exists for the test deck", "t-" in r and ".key" in r, r)
 
-    shutil.rmtree(tmp, ignore_errors=True)
     print(f"\n{len(FAILS)} failure(s)" if FAILS else "\nall checks passed")
     return 1 if FAILS else 0
 

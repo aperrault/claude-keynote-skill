@@ -560,19 +560,19 @@ def main() -> int:
             if not a.raw_style:
                 try:
                     applescript(f'''tell document "{esc(doc)}"
-  set ref to missing value
+  set bodyItem to missing value
   repeat with i from 1 to count of slides
     if (name of base layout of slide i) contains "Bullets" and (count of text items of slide i) >= 2 then
-      set ref to text item 2 of slide i
+      set bodyItem to text item 2 of slide i
       exit repeat
     end if
   end repeat
-  if ref is not missing value then
+  if bodyItem is not missing value then
     set n to count of text items of slide {a.slide}
     set ti to text item n of slide {a.slide}
-    set font of object text of ti to (font of object text of ref)
-    set size of object text of ti to (size of object text of ref)
-    set color of object text of ti to (color of object text of ref)
+    set font of object text of ti to (font of object text of bodyItem)
+    set size of object text of ti to (size of object text of bodyItem)
+    set color of object text of ti to (color of object text of bodyItem)
   end if
 end tell''')
                 except KeynoteError as exc:
