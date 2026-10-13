@@ -52,8 +52,43 @@ class DeckError(RuntimeError):
 # unpack / pack (keynote-parser CLI), cached per deck version
 # --------------------------------------------------------------------------
 
+# keynote-parser re-decodes every zip entry name as cp437 -> utf-8. That is
+# right for Keynote's own saves (no UTF-8 flag), but Python's ZipFile sets the
+# flag (0x800) on non-ASCII names when *we* pack, and re-decoding those crashes
+# (e.g. U+202F in macOS screenshot filenames) -- so a deck we wrote could not be
+# edited again. Patch the reader to skip names that are already UTF-8.
+_KP_SHIM = r"""
+import sys, zipfile
+from keynote_parser import file_utils as fu
+def zip_file_reader(path, progress=True):
+    zf = zipfile.ZipFile(path, "r")
+    for f in zf.filelist:
+        if not f.flag_bits & 0x800:
+            f.filename = f.filename.encode("cp437").decode("utf-8")
+    it = sorted(zf.filelist, key=lambda x: x.filename)
+    if progress:
+        it = fu.tqdm(it)
+    for zi in it:
+        if zi.filename.endswith("/"):
+            continue
+        # Keynote may flag a name UTF-8 in the local header but not in the
+        # central directory; zipfile then rejects the cp437 orig_filename.
+        try:
+            handle = zf.open(zi)
+        except zipfile.BadZipFile:
+            zi.orig_filename = zi.filename
+            handle = zf.open(zi)
+        with handle:
+            yield (zi.filename, handle)
+fu.zip_file_reader = zip_file_reader
+from keynote_parser.command_line import main
+sys.argv = ["keynote-parser", *sys.argv[1:]]
+sys.exit(main())
+"""
+
+
 def _kp(*args: str) -> None:
-    cmd = [sys.executable, "-m", "keynote_parser.command_line", *args]
+    cmd = [sys.executable, "-c", _KP_SHIM, *args]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout).strip().splitlines()[-8:]

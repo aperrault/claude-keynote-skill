@@ -95,6 +95,25 @@ def main():
     check("package outline shows LaTeX inline", "$\\frac{a}{b}" in outl and "$\\beta > 0$" in outl, outl)
     check("colored-run edit text", "BLUE words" in outl)
 
+    # non-ASCII member names (macOS screenshots carry U+202F): a deck we packed
+    # sets the UTF-8 flag; Keynote can set it in the local header only.
+    import zipfile
+    for label, clear_central in (("UTF-8 flagged", False), ("flag in local header only", True)):
+        nd = tmp / f"nonascii-{int(clear_central)}.key"
+        with zipfile.ZipFile(deck) as zin, zipfile.ZipFile(nd, "w") as zout:
+            for zi in zin.infolist():
+                zout.writestr(zi, zin.read(zi))
+            zout.writestr("Data/Screenshot at 3.56 PM.png", b"x")
+        if clear_central:
+            raw = bytearray(nd.read_bytes())
+            name = "Data/Screenshot at 3.56 PM.png".encode()
+            hdr = raw.rfind(name) - 46                # central header precedes the name
+            assert raw[hdr:hdr + 4] == b"PK\x01\x02", "central header not found"
+            raw[hdr + 9] &= ~0x08 & 0xFF               # flags at +8 (LE): clear bit 11 (0x800)
+            nd.write_bytes(bytes(raw))
+        r = run(I + ["outline", str(nd), "--slides", "1"], ok=False)
+        check(f"package reads a non-ASCII member name ({label})", r.returncode == 0, r.stdout + r.stderr)
+
     # ---------- reopen and verify ----------
     run(K + ["open", str(deck)])
     r = run(I + ["insert-text", str(deck), "--slide", "1", "--after", "Fixture deck", "--text", " X"], ok=False)
