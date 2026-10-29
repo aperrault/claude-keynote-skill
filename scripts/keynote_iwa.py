@@ -545,7 +545,8 @@ def _declare_stylesheet_ref(doc: dict, ids, obj_id: str) -> None:
 
 def edit_storage(doc: dict, st_ai: dict, pos: int, del_len: int, ins: str,
                  eqs, idx: Path, ids: IdAllocator, chunk: dict,
-                 eq_size: float | None = None, no_bullets: bool = False) -> list[str]:
+                 eq_size: float | None = None, no_bullets: bool = False,
+                 eq_color: str | None = None) -> list[str]:
     """Replace text[pos:pos+del_len] with `ins` (which may contain OBJ anchors
     for `eqs`) and keep every attribute table consistent. Returns new eq ids."""
     st = obj_of(st_ai)
@@ -677,6 +678,11 @@ def edit_storage(doc: dict, st_ai: dict, pos: int, del_len: int, ins: str,
                 o[EQ_OLD] = latex
             if eq_size is not None and isinstance(o.get(EQ_PROPS), dict):
                 o[EQ_PROPS]["fontSize"] = float(eq_size)
+            if eq_color is not None and isinstance(o.get(EQ_PROPS), dict):
+                rgb = [int(eq_color[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+                col = {"a": 1.0, "r": rgb[0], "g": rgb[1], "b": rgb[2], "model": "rgb", "rgbspace": "srgb"}
+                o[EQ_PROPS]["fontColor"] = col
+                o[EQ_PROPS]["tsdFill"] = {"color": copy.deepcopy(col)}
             o["super"]["caption"] = {"identifier": c1}
             o["super"]["title"] = {"identifier": c2}
             o["super"]["parent"] = {"identifier": sid}
@@ -870,14 +876,14 @@ def cmd_set_equation(deck: Path, n: int, k: int, latex: str, out: Path | None):
 
 def cmd_insert(deck: Path, n: int, after: str | None, before: str | None,
                eq_size: float | None, no_bullets: bool,
-               text: str, nth: int | None, out: Path | None):
+               text: str, nth: int | None, out: Path | None, eq_color: str | None = None):
     def fn(doc, chunk, idx, ids, ms):
         anchor = after if after is not None else before
         sid, r0, rl = locate(ms, anchor, nth)
         pos = r0 + rl if after is not None else r0
         ins, eqs = split_math(text)
         st_ai = next(ai for _, ai in archives(doc) if str(ai["header"]["identifier"]) == sid)
-        new = edit_storage(doc, st_ai, pos, 0, ins, eqs, idx, ids, chunk, eq_size, no_bullets)
+        new = edit_storage(doc, st_ai, pos, 0, ins, eqs, idx, ids, chunk, eq_size, no_bullets, eq_color)
         print(f"slide {n}: inserted {len(ins)} chars, {len(new)} equation(s) at {pos}")
     work, _ = mutate_slide(deck, n, fn)
     return commit(deck, work, out)
@@ -885,12 +891,12 @@ def cmd_insert(deck: Path, n: int, after: str | None, before: str | None,
 
 def cmd_replace(deck: Path, n: int, find: str, repl: str, nth: int | None,
                 eq_size: float | None, no_bullets: bool,
-                out: Path | None):
+                out: Path | None, eq_color: str | None = None):
     def fn(doc, chunk, idx, ids, ms):
         sid, r0, rl = locate(ms, find, nth)
         ins, eqs = split_math(repl)
         st_ai = next(ai for _, ai in archives(doc) if str(ai["header"]["identifier"]) == sid)
-        new = edit_storage(doc, st_ai, r0, rl, ins, eqs, idx, ids, chunk, eq_size, no_bullets)
+        new = edit_storage(doc, st_ai, r0, rl, ins, eqs, idx, ids, chunk, eq_size, no_bullets, eq_color)
         print(f"slide {n}: replaced {rl} chars with {len(ins)}, {len(new)} new equation(s)")
     work, _ = mutate_slide(deck, n, fn)
     return commit(deck, work, out)
@@ -927,6 +933,9 @@ def main() -> int:
                         help="give the edited text item the deck's 'None' list style (no bullets)")
         sp.add_argument("--eq-size", type=float, default=None, dest="eq_size",
                         help="font size for newly created equations (default: template's)")
+        sp.add_argument("--eq-color", default=None, dest="eq_color", metavar="RRGGBB",
+                        help="hex color for newly created equations (default: template's, "
+                             "which may be any equation in the deck, e.g. white on a title slide)")
 
     sp = sub.add_parser("set-equation", help="replace one equation's LaTeX")
     mut_args(sp)
@@ -986,9 +995,11 @@ def main() -> int:
         elif a.cmd == "set-equation":
             print(cmd_set_equation(a.deck, a.slide, a.eq, a.latex, a.out))
         elif a.cmd == "insert-text":
-            print(cmd_insert(a.deck, a.slide, a.after, a.before, a.eq_size, a.no_bullets, a.text, a.nth, a.out))
+            print(cmd_insert(a.deck, a.slide, a.after, a.before, a.eq_size, a.no_bullets, a.text, a.nth, a.out,
+                             a.eq_color))
         elif a.cmd == "replace-text":
-            print(cmd_replace(a.deck, a.slide, a.find, a.replace, a.nth, a.eq_size, a.no_bullets, a.out))
+            print(cmd_replace(a.deck, a.slide, a.find, a.replace, a.nth, a.eq_size, a.no_bullets, a.out,
+                              a.eq_color))
         elif a.cmd == "unpack":
             print(unpack(a.deck, a.force))
         elif a.cmd == "pack":
