@@ -9,12 +9,13 @@ text, notes, equations, colors and sizes survived. Prints PASS/FAIL per check
 and exits non-zero on any failure. The fixture is never modified.
 """
 from __future__ import annotations
-import base64, os, shutil, subprocess, sys, tempfile, time, zlib, struct
+import base64, json, os, shutil, subprocess, sys, tempfile, time, zlib, struct
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 K = [sys.executable, str(HERE.parent / "scripts/keynote.py")]
 I = ["uv", "run", "--with", "keynote-parser", "--with", "pyyaml", "python", str(HERE.parent / "scripts/keynote_iwa.py")]
+C = ["uv", "run", "--with", "keynote-parser", "--with", "pyyaml", "python", str(HERE.parent / "scripts/keynote_comments.py")]
 FAILS: list[str] = []
 
 
@@ -47,9 +48,10 @@ def drop_test_docs():
     name, so a deck left open by a run that died would otherwise be the one
     later `close` calls hit -- and the live deck, its folder deleted, then
     raises "The location of the document cannot be determined"."""
-    subprocess.run(["osascript", "-e", 'tell application id "com.apple.Keynote" to '
-                    'close (every document whose name is "t.key") saving no'],
-                   capture_output=True, text=True)
+    for name in ("t.key", "c.key"):
+        subprocess.run(["osascript", "-e", 'tell application id "com.apple.Keynote" to '
+                        f'close (every document whose name is "{name}") saving no'],
+                       capture_output=True, text=True)
 
 
 def main():
@@ -157,6 +159,37 @@ def _main(tmp: Path):
     run(K + ["close", str(deck)])
     r = run(K + ["backups", str(deck)]).stdout
     check("rolling backup exists for the test deck", "t-" in r and ".key" in r, r)
+
+    # ---------- comments (package layer, own fixture with one hand-made comment) ----------
+    cdeck = tmp / "c.key"
+    shutil.copy2(HERE / "fixture_comments.key", cdeck)
+    out = run(C + ["list", str(cdeck)]).stdout
+    check("comments list finds the fixture's template comment", "1 comment(s)" in out, out)
+    spec = tmp / "comments.json"
+    spec.write_text(json.dumps({"author": "Skill Test", "comments": [
+        {"slide": 2, "text": "Added by test on slide 2", "x": 100, "y": 100, "w": 600, "h": 200},
+        {"slide": 1, "text": "Added by test on slide 1", "x": 100, "y": 500, "w": 600, "h": 200}]}))
+    r = run(C + ["add", str(cdeck), str(spec)])
+    check("comments add created the author and two comments",
+          "created author Skill Test" in r.stdout and r.stdout.count(": comment ") == 2, r.stdout + r.stderr)
+    r = run(C + ["add", str(cdeck), str(spec)])
+    check("comments add reuses an existing author", "created author" not in r.stdout, r.stdout)
+    out = run(C + ["list", str(cdeck)]).stdout
+    check("comments list shows 5 comments, 4 under the new author",
+          "5 comment(s)" in out and out.count("| Skill Test |") == 4 and "Added by test on slide 2" in out, out)
+    run(K + ["open", str(cdeck)])
+    r = run(C + ["add", str(cdeck), str(spec)], ok=False)
+    check("comments add refused while deck is open", r.returncode != 0 and "open in Keynote" in (r.stdout + r.stderr))
+    r = run(K + ["verify", str(cdeck), "--slides", "1-7"], ok=False)
+    check("deck with added comments opens; all slides readable", r.returncode == 0, r.stdout + r.stderr)
+    if shutil.which("pdftotext"):
+        pdf = tmp / "c.pdf"
+        osa(f'with timeout of 300 seconds\ntell application id "com.apple.Keynote" to export document "c.key" '
+            f'to POSIX file "{pdf}" as PDF with properties {{include comments:true}}\nend timeout')
+        txt = subprocess.run(["pdftotext", str(pdf), "-"], capture_output=True, text=True).stdout
+        check("added comments are rendered by Keynote (PDF export with comments)",
+              txt.count("Added by test") >= 2, txt[:300])  # long texts may be clipped by the comment box
+    run(K + ["close", str(cdeck)])
 
     print(f"\n{len(FAILS)} failure(s)" if FAILS else "\nall checks passed")
     return 1 if FAILS else 0

@@ -78,6 +78,8 @@ C add  DECK.key spec.json [--out X.key] # deck must be CLOSED in Keynote (unless
   searches the deck) — a deck with no comment at all needs one made by hand once.
 - Comments are written under their own author (created on first use, light
   blue), never under the deck owner's name. Backup first, like the IWA mutators.
+- Comment boxes clip long text: size w/h to the deck (e.g. 240×110 on a 960-wide
+  deck, larger on 1920-wide ones).
 - Verify by exporting a PDF with `{include comments:true}` and rendering the page
   (`pdftoppm -f N -l N`; PDF pages count only visible slides). Tested on Keynote
   Creator Studio, Nov 2026 (comment = `TSWP.CommentInfoArchive` + text storage +
@@ -149,8 +151,9 @@ floating (non-inline) equations — rare in practice; they are listed as
 - **`verify`** after reopening: every item readable, every slide renders.
 - **Tests.** `python3 tests/run_tests.py` runs every mutator on
   `tests/fixture.key` (mechanical content, no course material) and checks
-  text, notes, equations, colors, sizes and the guards. Run it after touching
-  the scripts.
+  text, notes, equations, colors, sizes and the guards; `keynote_comments.py`
+  is tested on `tests/fixture_comments.key` (the same deck plus one hand-made
+  comment as template). Run it after touching the scripts.
 - Decks with **no equations** work too: the tool synthesizes the equation
   objects (and the `equation-0-imageStyle` media style) from a built-in template.
 - `add-text` copies the deck's body font/size/color (`--raw-style` to skip).
