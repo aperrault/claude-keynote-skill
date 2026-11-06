@@ -61,6 +61,30 @@ math means editing a string, and new equations need no PDF at all. Verified on
 Keynote 15.1.1: edited and freshly created equations render correctly, survive
 save + reopen, and AppleScript keeps working on the result.
 
+## Comments (Keynote "Kommentar" objects)
+
+AppleScript cannot read or create comments. `scripts/keynote_comments.py` works
+on the package (same `uv run --with keynote-parser --with pyyaml` prefix as `I`):
+
+```bash
+C() { uv run --with keynote-parser --with pyyaml python ~/.claude/skills/keynote/scripts/keynote_comments.py "$@"; }
+C list DECK.key [--slides 200-215]      # slide | author | date | position | text
+C add  DECK.key spec.json [--out X.key] # deck must be CLOSED in Keynote (unless --out)
+# spec.json: {"author": "Claude", "comments": [{"slide": 206, "text": "…", "x": 620, "y": 360, "w": 240, "h": 110}]}
+```
+
+- Slide numbers are **absolute** (hidden slides count). x/y/w/h in slide points.
+- `add` clones an existing comment as template (`template_slide` optional; it
+  searches the deck) — a deck with no comment at all needs one made by hand once.
+- Comments are written under their own author (created on first use, light
+  blue), never under the deck owner's name. Backup first, like the IWA mutators.
+- Comment boxes clip long text: size w/h to the deck (e.g. 240×110 on a 960-wide
+  deck, larger on 1920-wide ones).
+- Verify by exporting a PDF with `{include comments:true}` and rendering the page
+  (`pdftoppm -f N -l N`; PDF pages count only visible slides). Tested on Keynote
+  Creator Studio, Nov 2026 (comment = `TSWP.CommentInfoArchive` + text storage +
+  `TSD.CommentStorageArchive`, author in `AnnotationAuthorStorage`).
+
 ## Editing rules
 
 - **Never `keynote.py set-text` an item that contains equations.** AppleScript
@@ -127,8 +151,9 @@ floating (non-inline) equations — rare in practice; they are listed as
 - **`verify`** after reopening: every item readable, every slide renders.
 - **Tests.** `python3 tests/run_tests.py` runs every mutator on
   `tests/fixture.key` (mechanical content, no course material) and checks
-  text, notes, equations, colors, sizes and the guards. Run it after touching
-  the scripts.
+  text, notes, equations, colors, sizes and the guards; `keynote_comments.py`
+  is tested on `tests/fixture_comments.key` (the same deck plus one hand-made
+  comment as template). Run it after touching the scripts.
 - Decks with **no equations** work too: the tool synthesizes the equation
   objects (and the `equation-0-imageStyle` media style) from a built-in template.
 - `add-text` copies the deck's body font/size/color (`--raw-style` to skip).
