@@ -31,6 +31,7 @@ I set-equation DECK.key --slide 97 --eq 1 --latex '\nabla_\theta J(\theta) = …
 I insert-text  DECK.key --slide 97 --after 'cheaper?' --text ' So $\Theta(nd)$ suffices.'
 I replace-text DECK.key --slide 97 --find 'costs $\Theta(nd^2)$' --replace 'costs $O(nd^2)$'
 I replace-text DECK.key --slide 51 --no-bullets --find '@@S51@@' --replace $'line 1 $x$\nline 2'
+I insert-text  DECK.key --slide 97 --after 'so' --text ' $x^2$' --eq-color C00000 --eq-size 28
 I restyle      DECK.key --slide 51 --no-bullets --find 'line 1'   # repair para/list styles
 ```
 
@@ -75,6 +76,9 @@ save + reopen, and AppleScript keeps working on the result.
   dollar. Anchors (`--after`, `--before`, `--find`) are matched against the
   `outline` view, so they may include `$latex$` and literal `$`. If an anchor
   occurs more than once on the slide, pass `--nth`.
+- New equations clone an existing equation of the deck as template, including
+  its color and size (which may be white on a dark title slide). Pass
+  `--eq-color RRGGBB` / `--eq-size PT` to `insert-text` / `replace-text` to set them.
 - Deleting text that contains an equation removes the equation object too;
   inserting text with `\n` creates paragraphs that inherit the style of the
   paragraph they were inserted into.
