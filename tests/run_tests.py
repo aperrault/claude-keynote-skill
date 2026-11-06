@@ -103,6 +103,22 @@ def _main(tmp: Path):
     check("replace-text on token (multi-paragraph, 2 equations)", "2 new equation" in r.stdout, r.stdout + r.stderr)
     r = run(I + ["replace-text", str(deck), "--slide", "4", "--find", "blue words", "--replace", "BLUE words"])
     check("replace-text inside a colored run", "replaced" in r.stdout, r.stdout + r.stderr)
+    r = run(I + ["insert-text", str(deck), "--slide", "4", "--after", "plain words.", "--text", " $y=2x$",
+                 "--eq-color", "#C00000"])
+    check("insert-text with --eq-color", "1 equation" in r.stdout, r.stdout + r.stderr)
+    probe = ("import sys; sys.path.insert(0, %r); import keynote_iwa as K; from pathlib import Path\n"
+             "d = Path(%r); ms = K.deck_model(d)['slides'][3]\n"
+             "doc = K.load_yaml(K.unpack(d) / 'Index' / ms['file'])\n"
+             "for _, ai in K.archives(doc):\n"
+             "    o = K.obj_of(ai)\n"
+             "    if K.is_equation(o): print(o[K.EQ_TEXT].strip(), o[K.EQ_PROPS]['fontColor'])"
+             % (str(HERE.parent / "scripts"), str(deck)))
+    col_out = run(I[:-1] + ["-c", probe]).stdout
+    line = next((l for l in col_out.splitlines() if l.startswith("y=2x")), "")
+    check("--eq-color set the new equation's color (C00000)", "'r': 0.75" in line and "'g': 0.0" in line, col_out)
+    r = run(I + ["insert-text", str(deck), "--slide", "4", "--after", "plain words.", "--text", " $z$",
+                 "--eq-color", "red"], ok=False)
+    check("--eq-color rejects a non-hex value", r.returncode != 0 and "RRGGBB" in r.stderr, r.stdout + r.stderr)
     eqs = run(I + ["equations", str(deck), "--slides", "5"]).stdout
     check("equations lists the new equations", "\\alpha" in eqs and "\\beta" in eqs, eqs)
     r = run(I + ["set-equation", str(deck), "--slide", "5", "--eq", "2", "--latex", r"\beta > 0"])

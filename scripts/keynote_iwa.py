@@ -977,6 +977,11 @@ def main() -> int:
     deck_arg(sp)
 
     a = p.parse_args()
+    if getattr(a, "eq_color", None):
+        c = a.eq_color.lstrip("#")
+        if not re.fullmatch(r"[0-9A-Fa-f]{6}", c):
+            p.error(f"--eq-color expects a hex color RRGGBB (e.g. C00000), got {a.eq_color!r}")
+        a.eq_color = c
     try:
         if a.cmd == "restyle":
             print(cmd_restyle(a.deck, a.slide, a.find, a.nth, a.para_style, a.no_bullets, a.out))
