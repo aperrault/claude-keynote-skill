@@ -61,6 +61,28 @@ math means editing a string, and new equations need no PDF at all. Verified on
 Keynote 15.1.1: edited and freshly created equations render correctly, survive
 save + reopen, and AppleScript keeps working on the result.
 
+## Comments (Keynote "Kommentar" objects)
+
+AppleScript cannot read or create comments. `scripts/keynote_comments.py` works
+on the package (same `uv run --with keynote-parser --with pyyaml` prefix as `I`):
+
+```bash
+C() { uv run --with keynote-parser --with pyyaml python ~/.claude/skills/keynote/scripts/keynote_comments.py "$@"; }
+C list DECK.key [--slides 200-215]      # slide | author | date | position | text
+C add  DECK.key spec.json [--out X.key] # deck must be CLOSED in Keynote (unless --out)
+# spec.json: {"author": "Claude", "comments": [{"slide": 206, "text": "…", "x": 620, "y": 360, "w": 240, "h": 110}]}
+```
+
+- Slide numbers are **absolute** (hidden slides count). x/y/w/h in slide points.
+- `add` clones an existing comment as template (`template_slide` optional; it
+  searches the deck) — a deck with no comment at all needs one made by hand once.
+- Comments are written under their own author (created on first use, light
+  blue), never under the deck owner's name. Backup first, like the IWA mutators.
+- Verify by exporting a PDF with `{include comments:true}` and rendering the page
+  (`pdftoppm -f N -l N`; PDF pages count only visible slides). Tested on Keynote
+  Creator Studio, Nov 2026 (comment = `TSWP.CommentInfoArchive` + text storage +
+  `TSD.CommentStorageArchive`, author in `AnnotationAuthorStorage`).
+
 ## Editing rules
 
 - **Never `keynote.py set-text` an item that contains equations.** AppleScript
